@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package>
+  <name>can_driver</name>
+  <version>0.0.0</version>
+  <description>The CAN interface package</description>
+
+  <maintainer email="dawid.seredynski@gmail.com">Dawid Seredynski</maintainer>
+  <license>BSD</license>
+
+  <author>Dawid Seredynski</author>
+
+  <url></url>
+  
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>roscpp</build_depend>
+  <build_depend>ocl</build_depend>
+
+  <run_depend>roscpp</run_depend>
+  <run_depend>ocl</run_depend>
+
+  <!-- The export tag contains other, unspecified, tags -->
+  <export>
+  </export>
+</package>

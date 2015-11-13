@@ -1,1 +1,2 @@
-# can_driver
+# optoforce_can
+ROS library for CAN
