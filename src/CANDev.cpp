@@ -53,15 +53,17 @@ CANDev::FilterElement::FilterElement(uint32_t can_id, uint32_t can_mask) {
     can_mask_ = can_mask;
 }
 
-CANDev::CANDev(std::string dev_name, const std::vector<CANDev::FilterElement > &filter_vec) :
+CANDev::CANDev(const std::string &dev_name, const std::string &name, const std::vector<CANDev::FilterElement > &filter_vec) :
     frame_buf(1000),
-    buf_size(0)
+    buf_size(0),
+    dev_name_(dev_name),
+    name_(name)
 {
     struct sockaddr_can addr;
     struct ifreq ifr;
   
     if((dev = rt_dev_socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
-        std::cout<< "Error while opening socket" << std::endl;
+        std::cout<< "ERROR: CANDev::CANDev(" << dev_name_ << ", " << name_ << "): error in opening socket" << std::endl;
         dev = -1;
         return;
     }
@@ -73,26 +75,53 @@ CANDev::CANDev(std::string dev_name, const std::vector<CANDev::FilterElement > &
     addr.can_ifindex = ifr.ifr_ifindex; 
 
     int nfilters = filter_vec.size();
-    struct can_filter *rfilter = new can_filter[nfilters];
-    for (int i = 0; i < nfilters; i++) {
-        rfilter[i].can_id   = filter_vec[i].can_id_;
-        rfilter[i].can_mask = filter_vec[i].can_mask_;
-    }
+    if (nfilters > 0) {
+        struct can_filter *rfilter = new can_filter[nfilters];
+        for (int i = 0; i < nfilters; i++) {
+            rfilter[i].can_id   = filter_vec[i].can_id_;
+            rfilter[i].can_mask = filter_vec[i].can_mask_;
+        }
 
-    if (rt_dev_setsockopt(dev, SOL_CAN_RAW, CAN_RAW_FILTER, rfilter,
-                                        sizeof(struct can_filter) * nfilters) < 0)
-    {
-        std::cout << "Error: filter" << std::endl;
-        rt_dev_close(dev);
+        if (rt_dev_setsockopt(dev, SOL_CAN_RAW, CAN_RAW_FILTER, rfilter,
+                                            sizeof(struct can_filter) * nfilters) < 0)
+        {
+            std::cout << "ERROR: CANDev::CANDev(" << dev_name_ << ", " << name_ << "): filter" << std::endl;
+            rt_dev_close(dev);
+            delete[] rfilter;
+            dev = -1;
+            return;
+        }
+
         delete[] rfilter;
-        dev = -1;
-        return;
     }
 
-    delete[] rfilter;
+//#if !defined(HAVE_RTNET)
+    // TODO: check if it is working in RT
+    {
+        struct timeval timeout;
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+        if (setsockopt(dev, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(struct timeval)) < 0) {
+            std::cout << "ERROR: CANDev::CANDev: setsockopt SO_RCVTIMEO" << std::endl;
+            rt_dev_close(dev);
+            dev = -1;
+            return;
+        }
+        if (setsockopt(dev, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(struct timeval)) < 0) {
+            std::cout << "ERROR: CANDev::CANDev: setsockopt SO_SNDTIMEO" << std::endl;
+            rt_dev_close(dev);
+            dev = -1;
+            return;
+        }
+    }
+//#else
+//    // one second timeout for receive and send
+//    rt_dev_ioctl(dev, RTCAN_RTIOC_RCV_TIMEOUT, 1000000000UL);
+//    rt_dev_ioctl(dev, RTCAN_RTIOC_SND_TIMEOUT, 1000000000UL);
+//#endif
 
     if(rt_dev_bind(dev, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        std::cout << "Error in socket bind" << std::endl;
+        std::cout << "ERROR: CANDev::CANDev(" << dev_name_ << ", " << name_ << "): error in socket bind" << std::endl;
         rt_dev_close(dev);
         dev = -1;
     }
@@ -121,11 +150,10 @@ uint32_t CANDev::waitForReply(uint32_t can_id, uint8_t *data) {
     for(size_t i = 0; i < buf_size; i++) {
         if(frame_buf[i].can_id == can_id) {
             memcpy(data, frame_buf[i].data, frame_buf[i].can_dlc);
-            memcpy(data, frame_buf[i].data, frame_buf[i].can_dlc);
             uint8_t can_dlc = frame_buf[i].can_dlc;
 
             // erase
-            for (size_t j = i+1; j < buf_size; j++) {
+            for (int j = i+1; j < buf_size; j++) {
                 frame_buf[j-1] = frame_buf[j];
             }
             buf_size--;
@@ -135,8 +163,9 @@ uint32_t CANDev::waitForReply(uint32_t can_id, uint8_t *data) {
 
     // wait for new data
     while(1) {
-        size_t ret = rt_dev_recv(dev, reinterpret_cast<void*>(&frame), sizeof(frame), MSG_DONTWAIT);
+        size_t ret = rt_dev_recv(dev, reinterpret_cast<void*>(&frame), sizeof(frame), 0);
         if(ret != sizeof(frame)) {
+            //std::cout << "CANDev::waitForReply(" << dev_name_ << ", " << name_ << "): rt_dev_recv could not read" << std::endl;
             return 0;
         }
 
@@ -145,6 +174,8 @@ uint32_t CANDev::waitForReply(uint32_t can_id, uint8_t *data) {
             return frame.can_dlc;
         }
         if (buf_size >= frame_buf.size()) {
+            //std::cout << "CANDev::waitForReply(" << dev_name_ << ", " << name_ << "): buffer is full" << std::endl;
+            std::cout << std::endl;
             return 0;
         }
         frame_buf[buf_size] = frame;
@@ -171,7 +202,6 @@ uint32_t CANDev::readMultiFrameData(uint32_t can_id, uint8_t *data, CANDev::Head
             if(ret != sizeof(frame)) {
                 return 0;
             }
-//            std::cout << int(frame.data[0]) << " " << int(frame.data[1]) << " " << int(frame.data[2]) << " " << int(frame.data[3]) << std::endl;
             if(frame.can_id == can_id && header[0] == frame.data[0] && header[1] == frame.data[1] && header[2] == frame.data[2] && header[3] == frame.data[3]) {
                 multi_frame_buf[0] = frame;
                 multi_buf_size = 1;

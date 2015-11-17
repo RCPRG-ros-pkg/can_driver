@@ -51,7 +51,7 @@ public:
         uint32_t can_mask_;
     };
 
-    CANDev(std::string dev_name, const std::vector<FilterElement > &filter_vec);
+    CANDev(const std::string &dev_name, const std::string &name, const std::vector<FilterElement > &filter_vec);
     ~CANDev();
 
     void setMultiFrameReceiver(uint32_t nbytes);
@@ -70,6 +70,8 @@ protected:
     std::vector<can_frame> multi_frame_buf;
     int multi_buf_size;
     uint32_t multi_nbytes;
+    std::string dev_name_;
+    std::string name_;
 };
 
 #endif
