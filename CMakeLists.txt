@@ -5,23 +5,21 @@ find_package(catkin REQUIRED COMPONENTS
     roscpp cmake_modules
   )
 
-if(${OROCOS_TARGET} STREQUAL "xenomai" )
-  find_package(Xenomai REQUIRED)
-endif()
-
-#Start of user code user_build
-if(${OROCOS_TARGET} STREQUAL "xenomai" )
-  add_definitions(-DHAVE_RTNET)
-  add_definitions(-DXENOMAI)
-endif()
-#End of user code
-
 catkin_package(
     INCLUDE_DIRS include
     LIBRARIES can_driver
 )
 
-include_directories(include ${catkin_INCLUDE_DIRS})
+find_package(OROCOS-RTT REQUIRED)
+
+if(${OROCOS_TARGET} STREQUAL "xenomai" )
+  find_package(Xenomai REQUIRED)
+  include_directories(include ${catkin_INCLUDE_DIRS} ${Xenomai_RTDM_INCLUDE_DIRS})
+  add_definitions(-DHAVE_RTNET)
+  add_definitions(-DXENOMAI)
+else()
+  include_directories(include ${catkin_INCLUDE_DIRS})
+endif()
 
 add_library(can_driver src/CANDev.cpp)
 
