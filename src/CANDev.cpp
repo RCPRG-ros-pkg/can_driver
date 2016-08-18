@@ -133,14 +133,20 @@ CANDev::~CANDev() {
   }
 }
 
-void CANDev::send(const uint32_t can_id, const uint8_t len, const uint8_t *data) {
+bool CANDev::send(const uint32_t can_id, const uint8_t len, const uint8_t *data) {
   struct can_frame frame;
   
   frame.can_id = can_id;
   frame.can_dlc = len;
   
   memcpy(frame.data, data, len);
-  rt_dev_send(dev, reinterpret_cast<void*>(&frame), sizeof(frame), 0);
+  size_t ret = rt_dev_send(dev, reinterpret_cast<void*>(&frame), sizeof(frame), 0);
+
+  if (ret == sizeof(frame)) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 uint32_t CANDev::waitForReply(uint32_t can_id, uint8_t *data) {

@@ -57,7 +57,7 @@ public:
     void setMultiFrameReceiver(uint32_t nbytes);
     uint32_t readMultiFrameData(uint32_t can_id, uint8_t *data, CANDev::Header &header);
 
-    void send(uint32_t can_id, uint8_t len, const uint8_t *data);
+    bool send(uint32_t can_id, uint8_t len, const uint8_t *data);
     uint32_t waitForReply(uint32_t can_id, uint8_t *data);
     bool isOpened();
 protected:
